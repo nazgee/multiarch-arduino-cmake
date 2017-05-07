@@ -12,20 +12,25 @@ include(ArduConfig)
 # define all board-specific variables here, so user has to provide only
 # really essential variables RUNTIME_* variables
 if (NOT ESP8266_ARDU_CONFIG_DONE)
-    set(RUNTIME_upload.verbose "-vv" CACHE INTERNAL "")
-    set(RUNTIME_build.arch "ESP8266" CACHE INTERNAL "")
+    arduconfig_set_property("upload.verbose" "-vv")
+    arduconfig_set_property("build.arch" "ESP8266")
 endif()
 
-ardu_config()
+arduconfig_init()
 
 # upload tool and the way it's configured is different for all Arduiono boards
 # hence it's not handled by autoconfig
 if (NOT ESP8266_AUTOCONFIG_DONE)
-    ardu_config_export_value(ARDU_ESPTOOL_PATH "tools.esptool.path")
-    set(RUNTIME_path "${ARDU_ESPTOOL_PATH}" CACHE INTERNAL "")
-    ardu_config_export_value(ARDU_ESPTOOL_CMD "tools.esptool.cmd")
-    set(RUNTIME_cmd "${ARDU_ESPTOOL_CMD}" CACHE INTERNAL "")
-    ardu_config_export_value(ARDU_RECIPE_UPLOAD "tools.esptool.upload.pattern")
+    # "tools.esptool.upload.pattern" property expects "path" and "cmd"
+    # properties to point to esptool binary. In order to allow full resolution
+    # of "tools.esptool.upload.pattern" property, these variables are faked:
+    arduconfig_set_property_from_other("path" "tools.esptool.path")       
+    arduconfig_set_property_from_other("cmd" "tools.esptool.cmd")
+    
+    # once "cmd" and "path" properties are properly set above, full
+    # property resolution below will work just fine, and ARDU_RECIPE_UPLOAD
+    # will contain a properly resolved recipe
+    arduconfig_export_ardu_variable(RECIPE_UPLOAD "tools.esptool.upload.pattern")
 endif()
 
 set(ESP8266_ARDU_CONFIG_DONE true CACHE INTERNAL "")

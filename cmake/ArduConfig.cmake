@@ -1,18 +1,5 @@
-
-
-function(config_get_token OUT_VAR_TO_SET INPUT)
-    # get setting name from input
-    string(REGEX MATCH "^[^=]*" SETTING_NAME  ${INPUT})
-    
-    # get setting value from input
-    string(REPLACE "${SETTING_NAME}=" ""  SETTING_VALUE ${INPUT})
-    string(STRIP "${SETTING_VALUE}" SETTING_VALUE)
-    
-    # store setting name to output variable
-    set(${OUT_VAR_TO_SET} "${SETTING_NAME}" PARENT_SCOPE)
-endfunction()
-
-function(config_get_tokens_from_file CONFIG_FILE)
+###################################################################
+function(arduconfig_cache_shallow_properties CONFIG_FILE)
         if(EXISTS ${CONFIG_FILE})
              # Settings file split into lines
             file(STRINGS ${CONFIG_FILE} FILE_ENTRIES)
@@ -28,7 +15,7 @@ function(config_get_tokens_from_file CONFIG_FILE)
                     endif()
                     # store token and it's value as RUNTIME_ cache variable
                     # e.g.: "RUNTIME_compiler.path" variable can hold "/usr/bin/" value
-                    set(RUNTIME_${SETTING_NAME} "${SETTING_VALUE}" CACHE INTERNAL "")
+                    arduconfig_set_property(${SETTING_NAME} "${SETTING_VALUE}")
 #                    message(STATUS "Cached \"RUNTIME_${SETTING_NAME}\" variable with <${SETTING_VALUE}> value")
                 endif()
             endforeach()
@@ -37,22 +24,23 @@ function(config_get_tokens_from_file CONFIG_FILE)
         endif()
 endfunction()
 
+###################################################################
 # looks up a TOKEN's value in the following locations:
 # 1. among RUNTIME_* variables
 # 2. in given CONFIG_FILE
 # 3. in file pointed to by ARDU_RUNTIME_CONFIG_FILE variable
-function(config_get_value OUT_VAR_TO_SET TOKEN CONFIG_FILE)
+function(arduconfig_get_property_shallow OUT_VAR_TO_SET TOKEN CONFIG_FILE)
     set(MATCHER "${TOKEN}=")
     
     unset(SETTING_VALUE)
     
-    set(RUNTIME_SETTING_VARIABLE "RUNTIME_${TOKEN}")
+    set(PROPERTY_VARIABLE "RUNTIME_${TOKEN}")
     
-    if (${RUNTIME_SETTING_VARIABLE})
-#        message(STATUS "Token \"${TOKEN}\" resolved with runtime variable \"${RUNTIME_SETTING_VARIABLE}\" = <${${RUNTIME_SETTING_VARIABLE}}>")
-        set(SETTING_VALUE ${${RUNTIME_SETTING_VARIABLE}})
+    if (${PROPERTY_VARIABLE})
+#        message(STATUS "Token \"${TOKEN}\" resolved with runtime variable \"${PROPERTY_VARIABLE}\" = <${${PROPERTY_VARIABLE}}>")
+        set(SETTING_VALUE ${${PROPERTY_VARIABLE}})
     else()
-#        message(STATUS "Token \"${TOKEN}\" NOT resolved with runtime variable \"${RUNTIME_SETTING_VARIABLE}\"")
+#        message(STATUS "Token \"${TOKEN}\" NOT resolved with runtime variable \"${PROPERTY_VARIABLE}\"")
         if(EXISTS ${CONFIG_FILE})
              # Settings file split into lines
             file(STRINGS ${CONFIG_FILE} FILE_ENTRIES)
@@ -78,22 +66,22 @@ function(config_get_value OUT_VAR_TO_SET TOKEN CONFIG_FILE)
             message(STATUS "No more resolutions for \"${TOKEN}\"; already tried ARDU_RUNTIME_CONFIG_FILE and RUNTIME_* variables")
         else()
             # trying runtime.txt makes sense only if we're currently not processing different file
-            config_get_value(SETTING_VALUE ${TOKEN} ${ARDU_RUNTIME_CONFIG_FILE})
+            arduconfig_get_property_shallow(SETTING_VALUE ${TOKEN} ${ARDU_RUNTIME_CONFIG_FILE})
         endif()
     endif()
 
     if (NOT SETTING_VALUE)
-        message(FATAL_ERROR "Token \"${TOKEN}\" not found in ${CONFIG_FILE}, please provide <${RUNTIME_SETTING_VARIABLE}> variable or add \"${TOKEN}=\" entry to ARDU_RUNTIME_CONFIG_FILE=${ARDU_RUNTIME_CONFIG_FILE}")
+        message(FATAL_ERROR "Token \"${TOKEN}\" not found in ${CONFIG_FILE}, please provide <${PROPERTY_VARIABLE}> variable or add \"${TOKEN}=\" entry to ARDU_RUNTIME_CONFIG_FILE=${ARDU_RUNTIME_CONFIG_FILE}")
     endif()
 
     # push returned value to the caller's scope
     set(${OUT_VAR_TO_SET} "${SETTING_VALUE}" PARENT_SCOPE)
-
 endfunction()
 
-function(config_get_value_resolved OUT_VAR_TO_SET TOKEN CONFIG_FILE )
+###################################################################
+function(arduconfig_get_property_deep OUT_VAR_TO_SET TOKEN CONFIG_FILE )
     set(TEMP_VALUE "UNRESOLVED_${TOKEN}_ENTRY")
-    config_get_value(TEMP_VALUE ${TOKEN} ${CONFIG_FILE})
+    arduconfig_get_property_shallow(TEMP_VALUE ${TOKEN} ${CONFIG_FILE})
 
     set(UNRESOLVED_TOKENS)
     if (TEMP_VALUE)
@@ -122,7 +110,7 @@ function(config_get_value_resolved OUT_VAR_TO_SET TOKEN CONFIG_FILE )
             set(RESOLVED_TOKEN)
 #
 #            message(STATUS "recursively resolving \"${UNRESOLVED_TOKEN_MATCHER}\"")
-            config_get_value_resolved(RESOLVED_TOKEN "${UNRESOLVED_TOKEN_MATCHER}" ${CONFIG_FILE})
+            arduconfig_get_property_deep(RESOLVED_TOKEN "${UNRESOLVED_TOKEN_MATCHER}" ${CONFIG_FILE})
             
             # prepare RESOLVED_TOKEN_KEY that will be used to hold contents of RESOLVED_TOKEN
             set(RESOLVED_TOKEN_KEY)
@@ -162,10 +150,10 @@ function(config_get_value_resolved OUT_VAR_TO_SET TOKEN CONFIG_FILE )
 #    message(STATUS "Completed resolution for \"${TOKEN}\" with value <${TEMP_VALUE}>")
     set(${OUT_VAR_TO_SET} ${TEMP_VALUE} PARENT_SCOPE)
     set(RESOLVED_KEY "RUNTIME_${UNRESOLVED_TOKEN}" CACHE INTERNAL "")
-
 endfunction()
 
-function(config_get_values OUT_LIST_TO_APPEND MATCHER CONFIG_FILE)
+###################################################################
+function(arduconfig_get_property_shallows OUT_LIST_TO_APPEND MATCHER CONFIG_FILE)
 # does not clear the list... hence appending, instead of replacing
 #    set(${OUT_LIST_TO_APPEND} "" PARENT_SCOPE)
 
@@ -193,119 +181,161 @@ function(config_get_values OUT_LIST_TO_APPEND MATCHER CONFIG_FILE)
     endif()
 endfunction()
 
-function (ardu_config_export_value OUT_VARIABLE TOKEN)
-    config_get_value_resolved(TMP_VALUE ${TOKEN} ${ARDU_PLATFORM_FILE})
-    set(${OUT_VARIABLE} "${TMP_VALUE}" CACHE INTERNAL "variable exported during ardu_config process" )
+###################################################################
+function (arduconfig_export_ardu_variable OUT_VARIABLE TOKEN)
+    arduconfig_get_property_deep(TMP_VALUE ${TOKEN} ${ARDU_PLATFORM_FILE})
+    set(ARDU_${OUT_VARIABLE} "${TMP_VALUE}" CACHE INTERNAL "variable exported during arduconfig process" )
     
-   message(STATUS "ardu_config; ${OUT_VARIABLE} = ${${OUT_VARIABLE}}")
+    message(STATUS "arduconfig; ARDU_${OUT_VARIABLE} = ${ARDU_${OUT_VARIABLE}}")
 endfunction()
 
-function (ardu_config_export_binary OUT_VARIABLE TOKEN)
-    config_get_value_resolved(ARDU_TOOLCHAIN_BINARIES_PATH "compiler.path" ${ARDU_PLATFORM_FILE})
+###################################################################
+function (arduconfig_export_ardu_variable_compiler_bin OUT_VARIABLE TOKEN)
+    arduconfig_get_property_deep(ARDU_TOOLCHAIN_BINARIES_PATH "compiler.path" ${ARDU_PLATFORM_FILE})
 
-    config_get_value_resolved(TMP_CMD ${TOKEN} ${ARDU_PLATFORM_FILE})
-    set(${OUT_VARIABLE} "${ARDU_TOOLCHAIN_BINARIES_PATH}${TMP_CMD}" CACHE INTERNAL "compiler binary exported during ardu_config process")
+    arduconfig_get_property_deep(TMP_CMD ${TOKEN} ${ARDU_PLATFORM_FILE})
+    set(ARDU_${OUT_VARIABLE} "${ARDU_TOOLCHAIN_BINARIES_PATH}${TMP_CMD}" CACHE INTERNAL "compiler binary exported during arduconfig process")
 
-    message(STATUS "ardu_config; binary; ${OUT_VARIABLE} = ${${OUT_VARIABLE}}")
+    message(STATUS "arduconfig; ARDU_${OUT_VARIABLE} = ${ARDU_${OUT_VARIABLE}}")
 endfunction()
 
-function(ardu_config)
+###################################################################
+function (arduconfig_set_property_from_other PROPERTY_NEW PROPERTY_OLD)
+    arduconfig_export_ardu_variable(TEMP_PROP "${PROPERTY_OLD}")
+    arduconfig_set_property(${PROPERTY_NEW} "${ARDU_TEMP_PROP}")
+endfunction()
+
+###################################################################
+function (arduconfig_set_property OUT_RUNTIME_VARIABLE_PREFIX RUNTIME_VALUE)
+    set(RUNTIME_${OUT_RUNTIME_VARIABLE_PREFIX} "${RUNTIME_VALUE}" CACHE FORCE "")
+endfunction()
+    
+
+###################################################################
+# This is where all the magic happens - Arduino platform configurations files are parsed
+# and ARDU_* variables expected by the rest of Arduino build systems are available
+# after this function completes
+# 
+# These variables are expected to be set when this function is run:
+#
+# - ARDU_PLATFORM_PATH - mandatory; points to directory where "platform.txt" file is
+#     located
+# - ARDU_RUNTIME_CONFIG_FILE - recommended; points to "runtime.txt" file that contains
+#     chosen config
+# 
+# As a result, for example these ARDU_* variables will be set:
+#
+# - ARDU_BOARD_ID - depends on "build.board" properties from "runtime.txt"
+#     e.g.: "uno", "mega" for AVR platforms, or "nodemcu" for ESP platform
+# - ARDU_GCC_BINARY - depends on "compiler.c.cmd" and "compiler.path" properties from "platform.txt"
+#     e.g.: "/some/path/1.20.0-26-gb404fb9-2/bin/xtensa-lx106-elf-gcc" for ESP platform\
+# - ARDU_UPLOAD_SPEED - depends on "${ARDU_BOARD_ID}.upload.speed" property from "platform.txt"
+#     e.g.: "115200" or "57600"
+#
+# Unfortunately there is a plethora of ARDU_* variables exported; mentioning them
+# all is not possible. They are, however, clearly printed out when this function.
+# Some more variables might be added in future, when 
+#
+function(arduconfig_init)
     if (ARDU_CONFIG_DONE)
-        message(STATUS "ardu_config; already done, skipping}")
+        message(STATUS "arduconfig; already done, skipping}")
         return()
     endif()
 
     # silly attempt to have ARDU_RUNTIME_CONFIG_FILE guessed -- based on sane folders layout
     if (NOT EXISTS ${ARDU_RUNTIME_CONFIG_FILE}) 
-        message(WARNING "ardu_config; ARDU_RUNTIME_CONFIG_FILE was not set explicitly -- guessing it")
+        message(WARNING "arduconfig; ARDU_RUNTIME_CONFIG_FILE was not set explicitly -- guessing it")
         set(ARDU_RUNTIME_CONFIG_FILE "${CMAKE_CURRENT_LIST_DIR}/../../runtime.txt")
     endif()
     
-    message(STATUS "ardu_config; ARDU_RUNTIME_CONFIG_FILE=${ARDU_RUNTIME_CONFIG_FILE}")
+    message(STATUS "arduconfig; ARDU_RUNTIME_CONFIG_FILE=${ARDU_RUNTIME_CONFIG_FILE}")
 
     # silly attempt to have ARDU_PLATFORM_PATH guessed -- based on ARDU_RUNTIME_CONFIG_FILE contents
     if (NOT IS_DIRECTORY ${ARDU_PLATFORM_PATH})
-        message(WARNING "ardu_config; ardu_config was given wrong ARDU_PLATFORM_PATH -- guessing it")
+        message(WARNING "arduconfig; arduconfig was given wrong ARDU_PLATFORM_PATH -- guessing it")
        
         # find path to platform directory (one that contains platform.txt file) and
         # save it to ARDU_PLATFORM_PATH.
         # In order to work, one of the following should happen:
         # - ARDU_RUNTIME_CONFIG_FILE was provided and it contains "runtime.platform.path" entry
         # - RUNTIME_runtime_platform_path was provided
-        config_get_value_resolved(ARDU_PLATFORM_PATH "runtime.platform.path" ${ARDU_RUNTIME_CONFIG_FILE})
+        arduconfig_get_property_deep(ARDU_PLATFORM_PATH "runtime.platform.path" ${ARDU_RUNTIME_CONFIG_FILE})
     endif()
 
-    message(STATUS "ardu_config; ARDU_PLATFORM_PATH=${ARDU_PLATFORM_PATH}")
+    message(STATUS "arduconfig; ARDU_PLATFORM_PATH=${ARDU_PLATFORM_PATH}")
     
     # calculate platform.txt and it's RUNTIME_* variables cache
     set(ARDU_PLATFORM_FILE "${ARDU_PLATFORM_PATH}/platform.txt" CACHE INTERNAL "")
-    message(STATUS "ardu_config; ARDU_PLATFORM_FILE = ${ARDU_PLATFORM_FILE}")
-    config_get_tokens_from_file(${ARDU_PLATFORM_FILE})
+    message(STATUS "arduconfig; ARDU_PLATFORM_FILE = ${ARDU_PLATFORM_FILE}")
+    arduconfig_cache_shallow_properties(${ARDU_PLATFORM_FILE})
        
     # calculate boards.txt and it's RUNTIME_* variables cache
     set(ARDU_BOARDS_FILE "${ARDU_PLATFORM_PATH}/boards.txt" CACHE INTERNAL "")
-    message(STATUS "ardu_config; ARDU_BOARDS_FILE = ${ARDU_BOARDS_FILE}")
-    config_get_tokens_from_file(${ARDU_BOARDS_FILE})
+    message(STATUS "arduconfig; ARDU_BOARDS_FILE = ${ARDU_BOARDS_FILE}")
+    arduconfig_cache_shallow_properties(${ARDU_BOARDS_FILE})
     
     # calculate programmers.txt and it's RUNTIME_* variables cache
     set(ARDU_PROGRAMMERS_FILE "${ARDU_PLATFORM_PATH}/programmers.txt" CACHE INTERNAL "")
-    message(STATUS "ardu_config; ARDU_PROGRAMMERS_FILE = ${ARDU_PROGRAMMERS_FILE}")
-    config_get_tokens_from_file(${ARDU_PROGRAMMERS_FILE})
+    message(STATUS "arduconfig; ARDU_PROGRAMMERS_FILE = ${ARDU_PROGRAMMERS_FILE}")
+    arduconfig_cache_shallow_properties(${ARDU_PROGRAMMERS_FILE})
 
     # this is needed to avoid us crashing while resolving some values
     set(RUNTIME_runtime.ide.version "666" CACHE INTERNAL "")
 
     # make sure ARDU_BOARD_ID is exported
-    ardu_config_export_value(ARDU_BOARD_ID "build.board")
-
-    # potentially user-configurable
-    ardu_config_export_value(ARDU_FLASH_MODE "${ARDU_BOARD_ID}.build.flash_mode")
-    set(RUNTIME_build.flash_mode "${ARDU_FLASH_MODE}" CACHE INTERNAL "")
-    # potentially user-configurable    
-    ardu_config_export_value(ARDU_FLASH_FREQ "${ARDU_BOARD_ID}.build.flash_freq")
-    set(RUNTIME_build.flash_freq "${ARDU_FLASH_FREQ}" CACHE INTERNAL "")
-    # potentially user-configurable    
-    ardu_config_export_value(ARDU_FLASH_SIZE "${ARDU_BOARD_ID}.build.flash_size")
-    set(RUNTIME_build.flash_size "${ARDU_FLASH_SIZE}" CACHE INTERNAL "")
-    # potentially user-configurable    
-    ardu_config_export_value(ARDU_UPLOAD_RESET_METHOD "${ARDU_BOARD_ID}.upload.resetmethod")
-    set(RUNTIME_upload.resetmethod "${ARDU_UPLOAD_RESET_METHOD}" CACHE INTERNAL "")
-    # potentially user-configurable    
-    ardu_config_export_value(ARDU_UPLOAD_SPEED "${ARDU_BOARD_ID}.upload.speed")
-    set(RUNTIME_upload.speed "${ARDU_UPLOAD_SPEED}" CACHE INTERNAL "")
-
-    # override some of the Arduino build system placeholders with cmake counterparts
-    set(RUNTIME_includes "<FLAGS>" CACHE FORCE "")
-    set(RUNTIME_source_file "<SOURCE>" CACHE FORCE "")
-    set(RUNTIME_object_file "<OBJECT>" CACHE FORCE "")
-    set(RUNTIME_object_files "<OBJECTS>" CACHE FORCE "")
-    set(RUNTIME_build.path "<CMAKE_CURRENT_BINARY_DIR>" CACHE FORCE "")
-    set(RUNTIME_build.project_name "<TARGET>" CACHE FORCE "")
-       
-    ardu_config_export_value(ARDU_RECIPE_AR "recipe.ar.pattern")
-    ardu_config_export_value(ARDU_RECIPE_OBJ_C "recipe.c.o.pattern")
-    ardu_config_export_value(ARDU_RECIPE_OBJ_CXX "recipe.cpp.o.pattern")
-    ardu_config_export_value(ARDU_RECIPE_OBJ_ASM "recipe.S.o.pattern")
-    ardu_config_export_value(ARDU_RECIPE_LINK "recipe.c.combine.pattern")
-    ardu_config_export_value(ARDU_RECIPE_HEX "recipe.objcopy.hex.pattern")
-    ardu_config_export_value(ARDU_RECIPE_EEP "recipe.objcopy.eep.pattern")
-    ardu_config_export_value(ARDU_RECIPE_SIZE "recipe.size.pattern")
+    arduconfig_export_ardu_variable(BOARD_ID "build.board")
+   
+    # translate some of the ARDU_BOARD_ID dependant properties to generic ones
+    # e.g.: value of "nodemcu.build.debug_level" will be used to provide "build.debug_level"
+    arduconfig_set_property_from_other("build.flash_mode"   "${ARDU_BOARD_ID}.build.flash_mode")
+    arduconfig_set_property_from_other("build.flash_freq"   "${ARDU_BOARD_ID}.build.flash_freq")
+    arduconfig_set_property_from_other("build.flash_size"   "${ARDU_BOARD_ID}.build.flash_size")
+    arduconfig_set_property_from_other("build.debug_port"   "${ARDU_BOARD_ID}.build.debug_port")
+    arduconfig_set_property_from_other("build.debug_level"  "${ARDU_BOARD_ID}.build.debug_level")
+    arduconfig_set_property_from_other("upload.resetmethod" "${ARDU_BOARD_ID}.upload.resetmethod")
+    arduconfig_set_property_from_other("upload.speed"       "${ARDU_BOARD_ID}.upload.speed")
     
-    ardu_config_export_value(ARDU_GCC_FLAGS "compiler.c.flags")
-    ardu_config_export_value(ARDU_CXX_FLAGS "compiler.cpp.flags")
-    ardu_config_export_value(ARDU_ASM_FLAGS "compiler.S.flags")
-    ardu_config_export_value(ARDU_LINKER_FLAGS "compiler.c.elf.flags")
-    ardu_config_export_value(ARDU_LINKER_LIBS "compiler.c.elf.libs")
-    ardu_config_export_value(ARDU_PREPROCESSOR_FLAGS "compiler.cpreprocessor.flags")
+    # override some of the Arduino build system placeholders with cmake counterparts
+    arduconfig_set_property("includes"           "<FLAGS>")
+    arduconfig_set_property("source_file"        "<SOURCE>")
+    arduconfig_set_property("object_file"        "<OBJECT>")
+    arduconfig_set_property("object_files"       "<OBJECTS>")
+    arduconfig_set_property("build.path"         "<CMAKE_CURRENT_BINARY_DIR>")
+    arduconfig_set_property("build.project_name" "<TARGET>")
 
-    ardu_config_export_binary(ARDU_GCC_BINARY "compiler.c.cmd")
-    ardu_config_export_binary(ARDU_CXX_BINARY "compiler.cpp.cmd")
-    ardu_config_export_binary(ARDU_ASM_BINARY "compiler.S.cmd")
-    ardu_config_export_binary(ARDU_LD_BINARY "compiler.c.elf.cmd")
-    ardu_config_export_binary(ARDU_SIZE_BINARY "compiler.size.cmd")
+    # export ARDU_ veriables related to build setup
+    arduconfig_export_ardu_variable(FLASH_MODE          "build.flash_mode")
+    arduconfig_export_ardu_variable(FLASH_FREQ          "build.flash_freq")
+    arduconfig_export_ardu_variable(FLASH_SIZE          "build.flash_size")
+    arduconfig_export_ardu_variable(DEBUG_PORT          "build.debug_port")
+    arduconfig_export_ardu_variable(DEBUG_LEVEL         "build.debug_level")
+    arduconfig_export_ardu_variable(UPLOAD_RESET_METHOD "upload.resetmethod")
+    arduconfig_export_ardu_variable(UPLOAD_SPEED        "upload.speed")
+
+    # export ARDU_ veriables related to recipes
+    arduconfig_export_ardu_variable(RECIPE_AR           "recipe.ar.pattern")
+    arduconfig_export_ardu_variable(RECIPE_OBJ_C        "recipe.c.o.pattern")
+    arduconfig_export_ardu_variable(RECIPE_OBJ_CXX      "recipe.cpp.o.pattern")
+    arduconfig_export_ardu_variable(RECIPE_OBJ_ASM      "recipe.S.o.pattern")
+    arduconfig_export_ardu_variable(RECIPE_LINK         "recipe.c.combine.pattern")
+    arduconfig_export_ardu_variable(RECIPE_HEX          "recipe.objcopy.hex.pattern")
+    arduconfig_export_ardu_variable(RECIPE_EEP          "recipe.objcopy.eep.pattern")
+    arduconfig_export_ardu_variable(RECIPE_SIZE         "recipe.size.pattern")
+
+    # export ARDU_ veriables related to compiler settings
+    arduconfig_export_ardu_variable(GCC_FLAGS           "compiler.c.flags")
+    arduconfig_export_ardu_variable(CXX_FLAGS           "compiler.cpp.flags")
+    arduconfig_export_ardu_variable(ASM_FLAGS           "compiler.S.flags")
+    arduconfig_export_ardu_variable(LINKER_FLAGS        "compiler.c.elf.flags")
+    arduconfig_export_ardu_variable(LINKER_LIBS         "compiler.c.elf.libs")
+    arduconfig_export_ardu_variable(PREPROCESSOR_FLAGS  "compiler.cpreprocessor.flags")
+
+    # export ARDU_ veriables related to binaries
+    arduconfig_export_ardu_variable_compiler_bin(GCC_BINARY         "compiler.c.cmd")
+    arduconfig_export_ardu_variable_compiler_bin(CXX_BINARY         "compiler.cpp.cmd")
+    arduconfig_export_ardu_variable_compiler_bin(ASM_BINARY         "compiler.S.cmd")
+    arduconfig_export_ardu_variable_compiler_bin(LD_BINARY          "compiler.c.elf.cmd")
+    arduconfig_export_ardu_variable_compiler_bin(SIZE_BINARY        "compiler.size.cmd")
     
     set(ARDU_CONFIG_DONE true CACHE INTERNAL "indicates that autorun was already run and there is no need to do it again")
 endfunction()
-
-
-
