@@ -339,6 +339,9 @@ function(arduconfig_init)
     arduconfig_export_ardu_variable_compiler_bin(ASM_BINARY         "compiler.S.cmd")
     arduconfig_export_ardu_variable_compiler_bin(LD_BINARY          "compiler.c.elf.cmd")
     arduconfig_export_ardu_variable_compiler_bin(SIZE_BINARY        "compiler.size.cmd")
+
+    # makes sure that platform libraries are accessible for auto-linking
+    link_directories("${ARDU_PLATFORM_PATH}/libraries/")
     
     set(ARDU_CONFIG_DONE true CACHE INTERNAL "indicates that autorun was already run and there is no need to do it again")
 endfunction()

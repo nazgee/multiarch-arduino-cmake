@@ -490,9 +490,14 @@ function(find_arduino_libraries VAR_NAME SRCS ARDLIBS)
                     get_property(LIBRARY_SEARCH_PATH
                                  DIRECTORY     # Property Scope
                                  PROPERTY LINK_DIRECTORIES)
+
                     foreach(LIB_SEARCH_PATH ${LIBRARY_SEARCH_PATH} ${ARDUINO_LIBRARIES_PATH} ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/libraries ${ARDUINO_EXTRA_LIBRARIES_PATH})
                         if(EXISTS ${LIB_SEARCH_PATH}/${INCLUDE_NAME}/${CMAKE_MATCH_1})
                             list(APPEND ARDUINO_LIBS ${LIB_SEARCH_PATH}/${INCLUDE_NAME})
+                            break()
+                        endif()
+                        if(EXISTS ${LIB_SEARCH_PATH}/${INCLUDE_NAME}/src/${CMAKE_MATCH_1})
+                            list(APPEND ARDUINO_LIBS ${LIB_SEARCH_PATH}/${INCLUDE_NAME}/src/)
                             break()
                         endif()
                         if(EXISTS ${LIB_SEARCH_PATH}/${CMAKE_MATCH_1})
@@ -536,7 +541,10 @@ function(setup_arduino_library VAR_NAME BOARD_ID LIB_PATH COMPILE_FLAGS LINK_FLA
     set(LIB_TARGETS)
     set(LIB_INCLUDES)
 
-    get_filename_component(LIB_NAME ${LIB_PATH} NAME)
+    string(REGEX REPLACE "/$" "" SANITIZED_LIB_PATH ${LIB_PATH} )
+    string(REGEX REPLACE "/src$" "" SANITIZED_LIB_PATH ${SANITIZED_LIB_PATH} )
+
+    get_filename_component(LIB_NAME ${SANITIZED_LIB_PATH} NAME)
     set(TARGET_LIB_NAME ${BOARD_ID}_${LIB_NAME})
     if(NOT TARGET ${TARGET_LIB_NAME})
         string(REGEX REPLACE ".*/" "" LIB_SHORT_NAME ${LIB_NAME})
@@ -548,7 +556,6 @@ function(setup_arduino_library VAR_NAME BOARD_ID LIB_PATH COMPILE_FLAGS LINK_FLA
 
         find_sources(LIB_SRCS ${LIB_PATH} ${${LIB_SHORT_NAME}_RECURSE})
         if(LIB_SRCS)
-
             arduino_debug_msg("Generating Arduino ${LIB_NAME} library")
             add_library(${TARGET_LIB_NAME} STATIC ${LIB_SRCS})
 
@@ -570,6 +577,11 @@ function(setup_arduino_library VAR_NAME BOARD_ID LIB_PATH COMPILE_FLAGS LINK_FLA
                 COMPILE_FLAGS "${ARDUINO_COMPILE_FLAGS} ${LIB_INCLUDES} -I\"${LIB_PATH}\" -I\"${LIB_PATH}/utility\" ${COMPILE_FLAGS}"
                 LINK_FLAGS "${ARDUINO_LINK_FLAGS} ${LINK_FLAGS}")
             list(APPEND LIB_INCLUDES "-I\"${LIB_PATH}\" -I\"${LIB_PATH}/utility\"")
+
+            # avoid linking to itself
+            if (LIB_TARGETS)
+                list(REMOVE_ITEM LIB_TARGETS ${TARGET_LIB_NAME})
+            endif()
 
             target_link_libraries(${TARGET_LIB_NAME} ${BOARD_ID}_CORE ${LIB_TARGETS})
             list(APPEND LIB_TARGETS ${TARGET_LIB_NAME})
@@ -604,8 +616,10 @@ function(setup_arduino_libraries VAR_NAME BOARD_ID SRCS ARDLIBS COMPILE_FLAGS LI
     set(LIB_TARGETS)
     set(LIB_INCLUDES)
 
-    find_arduino_libraries(TARGET_LIBS "${SRCS}" ARDLIBS)
+    find_arduino_libraries(TARGET_LIBS "${SRCS}" "${ARDLIBS}")
+
     foreach(TARGET_LIB ${TARGET_LIBS})
+
         # Create static library instead of returning sources
         setup_arduino_library(LIB_DEPS ${BOARD_ID} ${TARGET_LIB} "${COMPILE_FLAGS}" "${LINK_FLAGS}")
         list(APPEND LIB_TARGETS ${LIB_DEPS})
