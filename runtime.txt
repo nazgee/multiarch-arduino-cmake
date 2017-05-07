@@ -1,0 +1,11 @@
+runtime.platform.path=/home/nazgee/.arduino15/packages/esp8266/hardware/esp8266/2.3.0
+runtime.tools.xtensa-lx106-elf-gcc.path={runtime.platform.path}/../../../tools/xtensa-lx106-elf-gcc/1.20.0-26-gb404fb9-2
+runtime.tools.esptool.path={runtime.platform.path}/../../../tools/esptool/0.4.9
+
+build.debug_level=-Dfixmefixmefixmefixme
+build.flash_ld=eagle.flash.4m1m.ld
+build.f_cpu=80000000L
+build.debug_port=/dev/ttyUSB0
+build.board=nodemcu
+
+serial.port=/dev/ttyUSB0
