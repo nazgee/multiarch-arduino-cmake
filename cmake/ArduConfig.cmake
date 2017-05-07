@@ -196,7 +196,10 @@ function (arduconfig_export_ardu_variable_compiler_bin OUT_VARIABLE TOKEN)
     arduconfig_get_property_deep(TMP_CMD ${TOKEN} ${ARDU_PLATFORM_FILE})
     set(ARDU_${OUT_VARIABLE} "${ARDU_TOOLCHAIN_BINARIES_PATH}${TMP_CMD}" CACHE INTERNAL "compiler binary exported during arduconfig process")
 
-    message(STATUS "arduconfig; ARDU_${OUT_VARIABLE} = ${ARDU_${OUT_VARIABLE}}")
+    # TODO provide argument that tells if we should be verbose instead of this workaround
+    if (NOT "TEMP_PROP" STREQUAL "${OUT_VARIABLE}")
+        message(STATUS "arduconfig; ARDU_${OUT_VARIABLE} = ${ARDU_${OUT_VARIABLE}}")
+    endif()
 endfunction()
 
 ###################################################################
